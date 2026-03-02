@@ -1,0 +1,36 @@
+package com.splittrip.data.entities
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+import androidx.room.TypeConverters
+import com.splittrip.data.database.Converters
+import java.util.UUID
+
+@Entity(tableName = "trips")
+data class Trip(
+    @PrimaryKey val tripId: String = UUID.randomUUID().toString(),
+    val tripName: String,
+    val currency: String = "USD",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "members")
+data class Member(
+    @PrimaryKey val memberId: String = UUID.randomUUID().toString(),
+    val tripId: String,
+    val name: String,
+    val totalBalance: Double = 0.0
+)
+
+@Entity(tableName = "expenses")
+@TypeConverters(Converters::class)
+data class Expense(
+    @PrimaryKey val expenseId: String = UUID.randomUUID().toString(),
+    val tripId: String,
+    val description: String,
+    val totalAmount: Double,
+    val paidBy: Map<String, Double>, // MemberID -> Amount paid
+    val participants: List<String>,   // List of MemberIDs
+    val date: Long = System.currentTimeMillis(),
+    val notes: String = ""
+)

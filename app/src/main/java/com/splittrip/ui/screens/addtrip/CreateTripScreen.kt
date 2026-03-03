@@ -14,10 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -61,14 +59,12 @@ fun CreateTripScreen(
 ) {
     var tripName by remember { mutableStateOf("") }
     var currency by remember { mutableStateOf("USD") }
-    var members by remember { mutableStateOf(listOf("")) }
+    var members by remember { mutableStateOf(listOf<String>()) }
     var newMemberName by remember { mutableStateOf("") }
     var showCurrencyMenu by remember { mutableStateOf(false) }
     var isCreating by remember { mutableStateOf(false) }
 
     val currencies = listOf("USD", "EUR", "GBP", "JPY", "THB", "SGD", "AUD", "CAD", "MYR", "IDR")
-    val focusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
 
     Scaffold(
         topBar = {
@@ -78,10 +74,7 @@ fun CreateTripScreen(
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.Filled.ArrowBack, "Back")
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                }
             )
         }
     ) { padding ->
@@ -148,9 +141,7 @@ fun CreateTripScreen(
                                 onValueChange = { newMemberName = it },
                                 label = { Text("Add Member") },
                                 placeholder = { Text("Enter name") },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .focusRequester(focusRequester),
+                                modifier = Modifier.weight(1f),
                                 leadingIcon = { Icon(Icons.Filled.Person, null) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(
@@ -165,14 +156,16 @@ fun CreateTripScreen(
                                 })
                             )
                             Spacer(Modifier.width(8.dp))
-                            FilledIconButton(
+                            Button(
                                 onClick = {
                                     if (newMemberName.isNotBlank()) {
                                         members = members + newMemberName.trim()
                                         newMemberName = ""
                                     }
                                 },
-                                containerColor = Primary
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                                modifier = Modifier.size(56.dp),
+                                contentPadding = PaddingValues(0.dp)
                             ) {
                                 Icon(Icons.Filled.Add, null, tint = Color.White)
                             }
@@ -181,13 +174,11 @@ fun CreateTripScreen(
                 }
             }
 
-            if (members.any { it.isNotBlank() }) {
-                items(members.filter { it.isNotBlank() }, key = { it + members.indexOf(it) }) { member ->
-                    MemberChip(
-                        name = member,
-                        onDelete = { members = members.filter { it != member } }
-                    )
-                }
+            items(members.filter { it.isNotBlank() }) { member ->
+                MemberChip(
+                    name = member,
+                    onDelete = { members = members.filter { it != member } }
+                )
             }
 
             item {

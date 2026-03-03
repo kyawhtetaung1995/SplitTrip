@@ -22,145 +22,222 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.splittrip.data.entities.Member
+import com.splittrip.data.entities.Trip
 import com.splittrip.data.repository.SplitTripRepository
 import com.splittrip.ui.theme.Primary
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class ManageMembersViewModel @Inject constructor(
-    private val repository: SplitTripRepository,
-    savedStateHandle: SavedStateHandle
+class CreateTripViewModel @Inject constructor(
+    private val repository: SplitTripRepository
 ) : ViewModel() {
-    private val tripId: String = checkNotNull(savedStateHandle["tripId"])
-
-    val members: StateFlow<List<Member>> = repository.getMembersByTrip(tripId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    fun addMember(name: String) {
-        if (name.isBlank()) return
+    fun createTrip(name: String, currency: String, members: List<String>, onDone: () -> Unit) {
         viewModelScope.launch {
-            repository.addMember(Member(tripId = tripId, name = name.trim()))
+            val trip = Trip(tripName = name, currency = currency)
+            repository.createTrip(trip)
+            members.forEach { memberName ->
+                if (memberName.isNotBlank()) {
+                    repository.addMember(Member(tripId = trip.tripId, name = memberName.trim()))
+                }
+            }
+            onDone()
         }
-    }
-
-    fun deleteMember(member: Member) {
-        viewModelScope.launch { repository.deleteMember(member) }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ManageMembersScreen(
+fun CreateTripScreen(
     onNavigateBack: () -> Unit,
-    viewModel: ManageMembersViewModel = hiltViewModel()
+    onTripCreated: (String) -> Unit,
+    viewModel: CreateTripViewModel = hiltViewModel()
 ) {
-    val members by viewModel.members.collectAsState()
+    var tripName by remember { mutableStateOf("") }
+    var currency by remember { mutableStateOf("USD") }
+    var members by remember { mutableStateOf(listOf<String>()) }
     var newMemberName by remember { mutableStateOf("") }
-    var deleteTarget by remember { mutableStateOf<Member?>(null) }
+    var showCurrencyMenu by remember { mutableStateOf(false) }
+    var isCreating by remember { mutableStateOf(false) }
+
+    val currencies = listOf("USD", "EUR", "GBP", "JPY", "THB", "SGD", "AUD", "CAD", "MYR", "IDR")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Manage Members", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = { IconButton(onClick = onNavigateBack) { Icon(Icons.Filled.ArrowBack, "Back") } }
+                title = { Text("New Trip", fontWeight = FontWeight.SemiBold) },
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(Icons.Filled.ArrowBack, "Back")
+                    }
+                }
             )
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
+                Text("Trip Details", fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
                 Card(shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(1.dp)) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         OutlinedTextField(
-                            value = newMemberName,
-                            onValueChange = { newMemberName = it },
-                            label = { Text("New Member Name") },
-                            modifier = Modifier.weight(1f),
+                            value = tripName,
+                            onValueChange = { tripName = it },
+                            label = { Text("Trip Name") },
+                            placeholder = { Text("e.g. Paris 2026") },
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = { Icon(Icons.Filled.Luggage, null) },
                             singleLine = true,
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Words,
-                                imeAction = ImeAction.Done
-                            ),
-                            keyboardActions = KeyboardActions(onDone = {
-                                viewModel.addMember(newMemberName)
-                                newMemberName = ""
-                            })
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words)
                         )
-                        Spacer(Modifier.width(8.dp))
-                        FilledIconButton(
-                            onClick = { viewModel.addMember(newMemberName); newMemberName = "" },
-                            containerColor = Primary
-                        ) { Icon(Icons.Filled.PersonAdd, null, tint = Color.White) }
+                        Spacer(Modifier.height(12.dp))
+                        Box {
+                            OutlinedTextField(
+                                value = currency,
+                                onValueChange = {},
+                                label = { Text("Currency") },
+                                modifier = Modifier.fillMaxWidth(),
+                                leadingIcon = { Icon(Icons.Filled.AttachMoney, null) },
+                                readOnly = true,
+                                trailingIcon = {
+                                    IconButton(onClick = { showCurrencyMenu = true }) {
+                                        Icon(Icons.Filled.ArrowDropDown, null)
+                                    }
+                                }
+                            )
+                            DropdownMenu(expanded = showCurrencyMenu, onDismissRequest = { showCurrencyMenu = false }) {
+                                currencies.forEach { curr ->
+                                    DropdownMenuItem(
+                                        text = { Text(curr) },
+                                        onClick = { currency = curr; showCurrencyMenu = false }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
             item {
-                Text(
-                    "${members.size} member${if (members.size != 1) "s" else ""}",
-                    fontSize = 12.sp,
+                Text("Members", fontSize = 13.sp, fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                    modifier = Modifier.padding(start = 4.dp)
+                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp))
+                Card(shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(1.dp)) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = newMemberName,
+                                onValueChange = { newMemberName = it },
+                                label = { Text("Add Member") },
+                                placeholder = { Text("Enter name") },
+                                modifier = Modifier.weight(1f),
+                                leadingIcon = { Icon(Icons.Filled.Person, null) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    capitalization = KeyboardCapitalization.Words,
+                                    imeAction = ImeAction.Done
+                                ),
+                                keyboardActions = KeyboardActions(onDone = {
+                                    if (newMemberName.isNotBlank()) {
+                                        members = members + newMemberName.trim()
+                                        newMemberName = ""
+                                    }
+                                })
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    if (newMemberName.isNotBlank()) {
+                                        members = members + newMemberName.trim()
+                                        newMemberName = ""
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                                modifier = Modifier.size(56.dp),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Filled.Add, null, tint = Color.White)
+                            }
+                        }
+                    }
+                }
+            }
+
+            items(members.filter { it.isNotBlank() }) { member ->
+                MemberChip(
+                    name = member,
+                    onDelete = { members = members.filter { it != member } }
                 )
             }
 
-            items(members, key = { it.memberId }) { member ->
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(1.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier.size(40.dp).clip(CircleShape).background(Primary.copy(alpha = 0.1f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(member.name.take(1).uppercase(), fontWeight = FontWeight.Bold, color = Primary)
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(member.name, fontWeight = FontWeight.Medium)
-                            val balance = member.totalBalance
-                            val (balText, balColor) = when {
-                                balance > 0.01 -> "Gets back ${String.format("%.2f", balance)}" to com.splittrip.ui.theme.Success
-                                balance < -0.01 -> "Owes ${String.format("%.2f", -balance)}" to com.splittrip.ui.theme.Error
-                                else -> "Even" to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+            item {
+                Spacer(Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        isCreating = true
+                        viewModel.createTrip(
+                            name = tripName,
+                            currency = currency,
+                            members = members.filter { it.isNotBlank() },
+                            onDone = {
+                                isCreating = false
+                                onNavigateBack()
                             }
-                            Text(balText, fontSize = 12.sp, color = balColor)
-                        }
-                        IconButton(onClick = { deleteTarget = member }) {
-                            Icon(Icons.Filled.PersonRemove, null, tint = MaterialTheme.colorScheme.error)
-                        }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    enabled = tripName.isNotBlank() && !isCreating,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) {
+                    if (isCreating) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Filled.Check, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create Trip", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
         }
     }
+}
 
-    deleteTarget?.let { member ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("Remove Member") },
-            text = { Text("Remove ${member.name} from this trip? This will recalculate all balances.") },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.deleteMember(member); deleteTarget = null },
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) { Text("Remove") }
-            },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("Cancel") } }
-        )
+@Composable
+fun MemberChip(name: String, onDelete: () -> Unit) {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Primary.copy(alpha = 0.08f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(Primary.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(name.take(1).uppercase(), fontWeight = FontWeight.Bold, color = Primary, fontSize = 14.sp)
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(name, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
+            IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Filled.Close, null, modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+            }
+        }
     }
 }

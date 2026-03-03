@@ -16,7 +16,7 @@ data class AddExpenseUiState(
     val totalAmount: String = "",
     val members: List<Member> = emptyList(),
     val participantIds: Set<String> = emptySet(),
-    val payerAmounts: Map<String, String> = emptyMap(), // MemberID -> amount string
+    val payerAmounts: Map<String, String> = emptyMap(),
     val isMultiPayer: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null,
@@ -31,7 +31,7 @@ class AddExpenseViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val tripId: String = checkNotNull(savedStateHandle["tripId"])
-    private val expenseId: String? = savedStateHandle["expenseId"]?.takeIf { it.isNotBlank() }
+    private val expenseId: String? = savedStateHandle.get<String>("expenseId")?.takeIf { s -> s.isNotBlank() }
 
     private val _uiState = MutableStateFlow(AddExpenseUiState())
     val uiState: StateFlow<AddExpenseUiState> = _uiState.asStateFlow()
@@ -53,7 +53,7 @@ class AddExpenseViewModel @Inject constructor(
                         totalAmount = expense.totalAmount.toString(),
                         members = members,
                         participantIds = expense.participants.toSet(),
-                        payerAmounts = expense.paidBy.mapValues { it.value.toString() },
+                        payerAmounts = expense.paidBy.mapValues { entry -> entry.value.toString() },
                         isMultiPayer = expense.paidBy.size > 1,
                         isEditMode = true,
                         existingExpenseId = expenseId
@@ -93,7 +93,6 @@ class AddExpenseViewModel @Inject constructor(
         _uiState.update { state ->
             val newIsMulti = !state.isMultiPayer
             if (!newIsMulti) {
-                // Reset to single payer - use first payer or first member
                 val firstPayer = state.payerAmounts.keys.firstOrNull() ?: state.members.firstOrNull()?.memberId
                 val newPayerAmounts = if (firstPayer != null) mapOf(firstPayer to "") else emptyMap()
                 state.copy(isMultiPayer = false, payerAmounts = newPayerAmounts)
@@ -140,10 +139,9 @@ class AddExpenseViewModel @Inject constructor(
             return
         }
 
-        // Validate payer amounts
         val paidByMap: Map<String, Double> = if (state.isMultiPayer) {
-            val amounts = state.payerAmounts.mapValues { (_, v) -> v.toDoubleOrNull() ?: 0.0 }
-                .filter { it.value > 0 }
+            val amounts = state.payerAmounts.mapValues { entry -> entry.value.toDoubleOrNull() ?: 0.0 }
+                .filter { entry -> entry.value > 0 }
             val sum = amounts.values.sum()
             if (Math.abs(sum - totalAmount) > 0.01) {
                 _uiState.update { it.copy(error = "Payer amounts (${String.format("%.2f", sum)}) must equal total (${String.format("%.2f", totalAmount)})") }
